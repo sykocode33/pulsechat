@@ -28,7 +28,7 @@ export interface ServerToClientEvents {
 }
 
 export interface ClientToServerEvents {
-  send_message: (data: { chatId: string; content: string; type?: string; replyToId?: string }) => void;
+  send_message: (data: { chatId: string; content: string; type?: string; replyToId?: string; mediaUrl?: string }) => void;
   typing_start: (data: { chatId: string }) => void;
   typing_stop: (data: { chatId: string }) => void;
   message_read: (data: { messageId: string }) => void;

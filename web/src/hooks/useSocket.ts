@@ -40,6 +40,12 @@ export function useSocket() {
       // Auto-deliver if not sender
       if (data.senderId !== userId) {
         socket.emit('message_delivered', { messageId: data.id });
+
+        // Increment unread if this chat is not currently active
+        const activeChat = useChatStore.getState().activeChat;
+        if (!activeChat || activeChat.id !== data.chatId) {
+          useChatStore.getState().incrementUnread(data.chatId);
+        }
       }
     });
 

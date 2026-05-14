@@ -16,6 +16,7 @@ export function setupChatHandlers(io: PulseChatIO, socket: PulseChatSocket, redi
         content: data.content,
         type: (data.type as 'TEXT' | 'IMAGE' | 'FILE' | 'VOICE') || 'TEXT',
         replyToId: data.replyToId,
+        mediaUrl: data.mediaUrl,
       });
 
       // Emit to all members in the chat room (including sender)

@@ -21,6 +21,7 @@ export interface Message {
   createdAt: string;
   deliveredAt?: string | null;
   readAt?: string | null;
+  mediaUrl?: string | null;
   sender: {
     id: string;
     username: string;
@@ -54,6 +55,7 @@ interface ChatState {
   messages: Record<string, Message[]>; // chatId -> messages
   typingUsers: Record<string, TypingUser[]>; // chatId -> typing users
   onlineUsers: Record<string, boolean>;
+  unreadCounts: Record<string, number>; // chatId -> unread count
 
   setChats: (chats: Chat[]) => void;
   setActiveChat: (chat: Chat | null) => void;
@@ -70,6 +72,9 @@ interface ChatState {
   setUserOffline: (userId: string) => void;
 
   updateMessageStatus: (messageId: string, status: 'delivered' | 'read') => void;
+
+  incrementUnread: (chatId: string) => void;
+  clearUnread: (chatId: string) => void;
 }
 
 export const useChatStore = create<ChatState>((set) => ({
@@ -78,6 +83,7 @@ export const useChatStore = create<ChatState>((set) => ({
   messages: {},
   typingUsers: {},
   onlineUsers: {},
+  unreadCounts: {},
 
   setChats: (chats) => set({ chats }),
 
@@ -149,4 +155,14 @@ export const useChatStore = create<ChatState>((set) => ({
       }
       return { messages: newMessages };
     }),
+
+  incrementUnread: (chatId) =>
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [chatId]: (state.unreadCounts[chatId] || 0) + 1 },
+    })),
+
+  clearUnread: (chatId) =>
+    set((state) => ({
+      unreadCounts: { ...state.unreadCounts, [chatId]: 0 },
+    })),
 }));

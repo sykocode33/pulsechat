@@ -73,9 +73,9 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
     });
   }, [messages, currentUserId]);
 
-  const handleSend = (content: string) => {
+  const handleSend = (content: string, type?: string, mediaUrl?: string) => {
     const socket = getSocket();
-    socket.emit('send_message', { chatId: chat.id, content });
+    socket.emit('send_message', { chatId: chat.id, content, type: type || 'TEXT', mediaUrl });
   };
 
   return (
@@ -204,7 +204,37 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
                     {msg.sender.username}
                   </div>
                 )}
-                <p style={{ fontSize: '0.9rem', lineHeight: 1.45, margin: 0 }}>{msg.content}</p>
+
+                {/* Media content */}
+                {msg.type === 'IMAGE' && msg.mediaUrl && (
+                  <img
+                    src={msg.mediaUrl}
+                    alt={msg.content}
+                    style={{
+                      maxWidth: '100%', maxHeight: '250px', borderRadius: 'var(--radius-md)',
+                      marginBottom: '0.3rem', cursor: 'pointer', objectFit: 'cover',
+                    }}
+                    onClick={() => window.open(msg.mediaUrl!, '_blank')}
+                  />
+                )}
+                {msg.type === 'FILE' && msg.mediaUrl && (
+                  <a
+                    href={msg.mediaUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: '0.5rem',
+                      padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.05)',
+                      borderRadius: 'var(--radius-sm)', textDecoration: 'none',
+                      color: 'var(--color-accent)', marginBottom: '0.3rem',
+                      border: '1px solid var(--color-border)',
+                    }}
+                  >
+                    📄 <span style={{ fontSize: '0.85rem' }}>{msg.content}</span>
+                  </a>
+                )}
+
+                {msg.type === 'TEXT' && <p style={{ fontSize: '0.9rem', lineHeight: 1.45, margin: 0 }}>{msg.content}</p>}
                 <div style={{
                   display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '0.3rem',
                   marginTop: '0.2rem',

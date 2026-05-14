@@ -3,6 +3,7 @@ import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
 import cookie from '@fastify/cookie';
 import rateLimit from '@fastify/rate-limit';
+import multipart from '@fastify/multipart';
 
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
@@ -14,6 +15,7 @@ import authRoutes from './modules/auth/auth.routes.js';
 import usersRoutes from './modules/users/users.routes.js';
 import chatsRoutes from './modules/chats/chats.routes.js';
 import { setupSocketHandlers } from './sockets/index.js';
+import uploadsRoutes from './modules/uploads/uploads.routes.js';
 
 // ─── Build Server ──────────────────────────────────
 async function buildServer() {
@@ -46,12 +48,14 @@ async function buildServer() {
   // ─── Infrastructure Plugins ──────────────────────
   await app.register(redisPlugin);
   await app.register(socketPlugin);
+  await app.register(multipart, { limits: { fileSize: 25 * 1024 * 1024 } });
 
   // ─── Routes ──────────────────────────────────────
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(usersRoutes, { prefix: '/api/users' });
   await app.register(chatsRoutes, { prefix: '/api/chats' });
+  await app.register(uploadsRoutes, { prefix: '/api/uploads' });
 
   // ─── Socket.IO Handlers ──────────────────────────
   app.ready().then(() => {

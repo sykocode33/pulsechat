@@ -14,6 +14,8 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
   const activeChat = useChatStore((s) => s.activeChat);
   const addChat = useChatStore((s) => s.addChat);
   const onlineUsers = useChatStore((s) => s.onlineUsers);
+  const unreadCounts = useChatStore((s) => s.unreadCounts);
+  const clearUnread = useChatStore((s) => s.clearUnread);
   const currentUser = useAuthStore((s) => s.user);
   const [searchQuery, setSearchQuery] = useState('');
   const [showNewChat, setShowNewChat] = useState(false);
@@ -37,6 +39,7 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
       const { data } = await api.post('/chats/private', { targetUserId });
       addChat(data.chat);
       onSelectChat(data.chat);
+      clearUnread(data.chat.id);
       setShowNewChat(false);
       setUserSearch('');
       setSearchResults([]);
@@ -137,7 +140,7 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
         {filteredChats.map((chat) => (
           <button
             key={chat.id}
-            onClick={() => onSelectChat(chat)}
+            onClick={() => { onSelectChat(chat); clearUnread(chat.id); }}
             className="animate-fade-in"
             style={{
               width: '100%', display: 'flex', alignItems: 'center', gap: '0.75rem',
@@ -185,6 +188,18 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
                 {chat.lastMessage?.content || 'No messages yet'}
               </p>
             </div>
+
+            {/* Unread badge */}
+            {(unreadCounts[chat.id] || 0) > 0 && (
+              <div style={{
+                minWidth: '22px', height: '22px', borderRadius: 'var(--radius-full)',
+                background: 'var(--color-accent)', color: 'white',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                fontSize: '0.7rem', fontWeight: 700, padding: '0 6px', flexShrink: 0,
+              }}>
+                {unreadCounts[chat.id] > 99 ? '99+' : unreadCounts[chat.id]}
+              </div>
+            )}
           </button>
         ))}
 
