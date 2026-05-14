@@ -7,6 +7,7 @@ import { getSocket } from '@/services/socket';
 import { formatTime, getInitials } from '@/lib/utils';
 import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
+import SecureMedia from './SecureMedia';
 
 interface MessageAreaProps {
   chat: Chat;
@@ -207,31 +208,10 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
 
                 {/* Media content */}
                 {msg.type === 'IMAGE' && msg.mediaUrl && (
-                  <img
-                    src={msg.mediaUrl}
-                    alt={msg.content}
-                    style={{
-                      maxWidth: '100%', maxHeight: '250px', borderRadius: 'var(--radius-md)',
-                      marginBottom: '0.3rem', cursor: 'pointer', objectFit: 'cover',
-                    }}
-                    onClick={() => window.open(msg.mediaUrl!, '_blank')}
-                  />
+                  <SecureMedia url={msg.mediaUrl} alt={msg.content} type="image" />
                 )}
                 {msg.type === 'FILE' && msg.mediaUrl && (
-                  <a
-                    href={msg.mediaUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    style={{
-                      display: 'flex', alignItems: 'center', gap: '0.5rem',
-                      padding: '0.5rem 0.75rem', background: 'rgba(255,255,255,0.05)',
-                      borderRadius: 'var(--radius-sm)', textDecoration: 'none',
-                      color: 'var(--color-accent)', marginBottom: '0.3rem',
-                      border: '1px solid var(--color-border)',
-                    }}
-                  >
-                    📄 <span style={{ fontSize: '0.85rem' }}>{msg.content}</span>
-                  </a>
+                  <SecureMedia url={msg.mediaUrl} type="file" fileName={msg.content} />
                 )}
 
                 {msg.type === 'TEXT' && <p style={{ fontSize: '0.9rem', lineHeight: 1.45, margin: 0 }}>{msg.content}</p>}

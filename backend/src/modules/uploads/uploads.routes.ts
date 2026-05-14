@@ -1,7 +1,8 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '../../middleware/authenticate.js';
 import { logger } from '../../utils/logger.js';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
+import { env } from '../../config/env.js';
 import path from 'path';
 import fs from 'fs';
 
@@ -11,7 +12,7 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-// MIME type map for proper content-type headers
+// MIME type map
 const MIME_TYPES: Record<string, string> = {
   '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
   '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
@@ -21,9 +22,39 @@ const MIME_TYPES: Record<string, string> = {
   '.txt': 'text/plain', '.zip': 'application/zip', '.rar': 'application/x-rar-compressed',
 };
 
+// ─── Signed URL Helpers ────────────────────────────
+const SIGNED_URL_SECRET = env.JWT_ACCESS_SECRET; // Reuse existing secret
+const SIGNED_URL_EXPIRY = 3600; // 1 hour in seconds
+
+function generateSignedUrl(filename: string): string {
+  const expires = Math.floor(Date.now() / 1000) + SIGNED_URL_EXPIRY;
+  const signature = createHmac('sha256', SIGNED_URL_SECRET)
+    .update(`${filename}:${expires}`)
+    .digest('hex');
+
+  return `/api/uploads/files/${filename}?expires=${expires}&sig=${signature}`;
+}
+
+function verifySignedUrl(filename: string, expires: string, signature: string): boolean {
+  const now = Math.floor(Date.now() / 1000);
+  const expiryTime = parseInt(expires, 10);
+
+  // Check expiry
+  if (isNaN(expiryTime) || now > expiryTime) {
+    return false;
+  }
+
+  // Verify signature
+  const expected = createHmac('sha256', SIGNED_URL_SECRET)
+    .update(`${filename}:${expires}`)
+    .digest('hex');
+
+  return signature === expected;
+}
+
 export default async function uploadsRoutes(app: FastifyInstance) {
 
-  // ─── POST /uploads (Protected — requires login) ──
+  // ─── POST /uploads (Protected) ───────────────────
   app.post('/', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const data = await request.file();
@@ -32,7 +63,6 @@ export default async function uploadsRoutes(app: FastifyInstance) {
         return reply.status(400).send({ message: 'No file provided' });
       }
 
-      // Validate file size (25MB)
       const MAX_SIZE = 25 * 1024 * 1024;
       const chunks: Buffer[] = [];
       let size = 0;
@@ -50,16 +80,17 @@ export default async function uploadsRoutes(app: FastifyInstance) {
       const fileName = `${randomUUID()}${ext}`;
       const filePath = path.join(UPLOAD_DIR, fileName);
 
-      // Write file to disk
       fs.writeFileSync(filePath, buffer);
 
-      const url = `/api/uploads/files/${fileName}`;
+      // Return a signed URL (expires in 1 hour)
+      const url = generateSignedUrl(fileName);
 
       logger.info(`File uploaded: ${data.filename} -> ${fileName} (${(size / 1024).toFixed(1)}KB)`);
 
       return reply.send({
         url,
         fileName: data.filename,
+        storedName: fileName,
         size,
         mimeType: data.mimetype,
       });
@@ -69,11 +100,9 @@ export default async function uploadsRoutes(app: FastifyInstance) {
     }
   });
 
-  // ─── GET /uploads/files/:filename (Public — no auth) ─
-  app.get('/files/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
+  // ─── GET /uploads/sign/:filename (Protected — refresh signed URL) ─
+  app.get('/sign/:filename', { preHandler: [authenticate] }, async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
     const { filename } = request.params;
-
-    // Sanitize filename to prevent directory traversal
     const sanitized = path.basename(filename);
     const filePath = path.join(UPLOAD_DIR, sanitized);
 
@@ -81,14 +110,38 @@ export default async function uploadsRoutes(app: FastifyInstance) {
       return reply.status(404).send({ message: 'File not found' });
     }
 
-    // Set proper content type
+    return reply.send({ url: generateSignedUrl(sanitized) });
+  });
+
+  // ─── GET /uploads/files/:filename (Signed URL required) ─
+  app.get('/files/:filename', async (request: FastifyRequest<{ Params: { filename: string }; Querystring: { expires?: string; sig?: string } }>, reply: FastifyReply) => {
+    const { filename } = request.params;
+    const { expires, sig } = request.query as { expires?: string; sig?: string };
+
+    // Verify signed URL
+    if (!expires || !sig) {
+      return reply.status(401).send({ message: 'Signed URL required' });
+    }
+
+    const sanitized = path.basename(filename);
+
+    if (!verifySignedUrl(sanitized, expires, sig)) {
+      return reply.status(403).send({ message: 'Invalid or expired link' });
+    }
+
+    const filePath = path.join(UPLOAD_DIR, sanitized);
+
+    if (!fs.existsSync(filePath)) {
+      return reply.status(404).send({ message: 'File not found' });
+    }
+
     const ext = path.extname(sanitized).toLowerCase();
     const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
 
     const stream = fs.createReadStream(filePath);
     return reply
       .header('Content-Type', mimeType)
-      .header('Cache-Control', 'public, max-age=31536000, immutable')
+      .header('Cache-Control', 'private, max-age=3600')
       .send(stream);
   });
 }
