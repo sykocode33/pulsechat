@@ -60,7 +60,7 @@ export default function ChatList({ onSelectChat }: ChatListProps) {
   const isOnline = (chat: Chat) => {
     if (chat.type === 'GROUP') return false;
     const other = chat.members.find((m) => m.user.id !== currentUser?.id);
-    return other ? onlineUsers.has(other.user.id) : false;
+    return other ? !!onlineUsers[other.user.id] : false;
   };
 
   const filteredChats = chats.filter((c) =>

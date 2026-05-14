@@ -14,10 +14,13 @@ interface MessageAreaProps {
   onBack: () => void;
 }
 
+const EMPTY_MESSAGES: import('@/store/chatStore').Message[] = [];
+const EMPTY_TYPING: { userId: string; username: string }[] = [];
+
 export default function MessageArea({ chat, currentUserId, onBack }: MessageAreaProps) {
-  const messages = useChatStore((s) => s.messages[chat.id] || []);
+  const messages = useChatStore((s) => s.messages[chat.id] ?? EMPTY_MESSAGES);
   const setMessages = useChatStore((s) => s.setMessages);
-  const typingUsers = useChatStore((s) => s.typingUsers[chat.id] || []);
+  const typingUsers = useChatStore((s) => s.typingUsers[chat.id] ?? EMPTY_TYPING);
   const onlineUsers = useChatStore((s) => s.onlineUsers);
   const scrollRef = useRef<HTMLDivElement>(null);
   const currentUser = useAuthStore((s) => s.user);
@@ -27,7 +30,7 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
     : null;
 
   const chatName = chat.type === 'GROUP' ? chat.name : otherUser?.username || 'Unknown';
-  const isOtherOnline = otherUser ? onlineUsers.has(otherUser.id) : false;
+  const isOtherOnline = otherUser ? !!onlineUsers[otherUser.id] : false;
 
   // Load messages
   useEffect(() => {
@@ -57,11 +60,17 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
     }
   }, [messages, typingUsers]);
 
-  // Mark messages as read
+  // Mark messages as read (only on initial load, not on every update)
+  const readRef = useRef<Set<string>>(new Set());
   useEffect(() => {
     const socket = getSocket();
-    const unread = messages.filter((m) => m.senderId !== currentUserId && !m.readAt);
-    unread.forEach((m) => socket.emit('message_read', { messageId: m.id }));
+    const unread = messages.filter(
+      (m) => m.senderId !== currentUserId && !m.readAt && !readRef.current.has(m.id)
+    );
+    unread.forEach((m) => {
+      readRef.current.add(m.id);
+      socket.emit('message_read', { messageId: m.id });
+    });
   }, [messages, currentUserId]);
 
   const handleSend = (content: string) => {

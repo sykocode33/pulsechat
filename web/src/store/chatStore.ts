@@ -53,7 +53,7 @@ interface ChatState {
   activeChat: Chat | null;
   messages: Record<string, Message[]>; // chatId -> messages
   typingUsers: Record<string, TypingUser[]>; // chatId -> typing users
-  onlineUsers: Set<string>;
+  onlineUsers: Record<string, boolean>;
 
   setChats: (chats: Chat[]) => void;
   setActiveChat: (chat: Chat | null) => void;
@@ -77,7 +77,7 @@ export const useChatStore = create<ChatState>((set) => ({
   activeChat: null,
   messages: {},
   typingUsers: {},
-  onlineUsers: new Set(),
+  onlineUsers: {},
 
   setChats: (chats) => set({ chats }),
 
@@ -127,17 +127,14 @@ export const useChatStore = create<ChatState>((set) => ({
     }),
 
   setUserOnline: (userId) =>
-    set((state) => {
-      const newSet = new Set(state.onlineUsers);
-      newSet.add(userId);
-      return { onlineUsers: newSet };
-    }),
+    set((state) => ({
+      onlineUsers: { ...state.onlineUsers, [userId]: true },
+    })),
 
   setUserOffline: (userId) =>
     set((state) => {
-      const newSet = new Set(state.onlineUsers);
-      newSet.delete(userId);
-      return { onlineUsers: newSet };
+      const { [userId]: _, ...rest } = state.onlineUsers;
+      return { onlineUsers: rest };
     }),
 
   updateMessageStatus: (messageId, status) =>
