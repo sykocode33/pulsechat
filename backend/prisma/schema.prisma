@@ -1,0 +1,214 @@
+// This is your Prisma schema file.
+// Learn more: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── User ──────────────────────────────────────────
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  username     String   @unique
+  passwordHash String   @map("password_hash")
+  avatar       String?
+  bio          String?
+  status       String?  @default("Hey there! I'm using PulseChat")
+  isOnline     Boolean  @default(false) @map("is_online")
+  lastSeen     DateTime @default(now()) @map("last_seen")
+  role         Role     @default(USER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  messages       Message[]
+  chatMembers    ChatMember[]
+  refreshTokens  RefreshToken[]
+  devices        Device[]
+  callsMade      Call[]         @relation("caller")
+  callsReceived  Call[]         @relation("receiver")
+
+  @@map("users")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+// ─── Chat ──────────────────────────────────────────
+model Chat {
+  id        String   @id @default(uuid())
+  type      ChatType @default(PRIVATE)
+  name      String?
+  avatar    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  members  ChatMember[]
+  messages Message[]
+
+  @@map("chats")
+}
+
+enum ChatType {
+  PRIVATE
+  GROUP
+}
+
+// ─── Chat Member ───────────────────────────────────
+model ChatMember {
+  id        String         @id @default(uuid())
+  role      ChatMemberRole @default(MEMBER)
+  joinedAt  DateTime       @default(now()) @map("joined_at")
+  mutedAt   DateTime?      @map("muted_at")
+
+  // Relations
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  chatId String @map("chat_id")
+  chat   Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, chatId])
+  @@index([userId])
+  @@index([chatId])
+  @@map("chat_members")
+}
+
+enum ChatMemberRole {
+  MEMBER
+  ADMIN
+  OWNER
+}
+
+// ─── Message ───────────────────────────────────────
+model Message {
+  id          String      @id @default(uuid())
+  content     String      @db.Text
+  type        MessageType @default(TEXT)
+  mediaUrl    String?     @map("media_url")
+  replyToId   String?     @map("reply_to_id")
+  replyTo     Message?    @relation("replies", fields: [replyToId], references: [id])
+  replies     Message[]   @relation("replies")
+  isEdited    Boolean     @default(false) @map("is_edited")
+  isDeleted   Boolean     @default(false) @map("is_deleted")
+  deliveredAt DateTime?   @map("delivered_at")
+  readAt      DateTime?   @map("read_at")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
+
+  // Relations
+  senderId String @map("sender_id")
+  sender   User   @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  chatId   String @map("chat_id")
+  chat     Chat   @relation(fields: [chatId], references: [id], onDelete: Cascade)
+
+  // Reactions
+  reactions MessageReaction[]
+
+  @@index([chatId, createdAt])
+  @@index([senderId])
+  @@map("messages")
+}
+
+enum MessageType {
+  TEXT
+  IMAGE
+  FILE
+  VOICE
+  SYSTEM
+}
+
+// ─── Message Reaction ──────────────────────────────
+model MessageReaction {
+  id        String   @id @default(uuid())
+  emoji     String
+  userId    String   @map("user_id")
+  messageId String   @map("message_id")
+  message   Message  @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, messageId, emoji])
+  @@map("message_reactions")
+}
+
+// ─── Call ───────────────────────────────────────────
+model Call {
+  id         String     @id @default(uuid())
+  type       CallType   @default(VOICE)
+  status     CallStatus @default(RINGING)
+  startedAt  DateTime?  @map("started_at")
+  endedAt    DateTime?  @map("ended_at")
+  duration   Int?       // seconds
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  callerId   String @map("caller_id")
+  caller     User   @relation("caller", fields: [callerId], references: [id], onDelete: Cascade)
+  receiverId String @map("receiver_id")
+  receiver   User   @relation("receiver", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([callerId])
+  @@index([receiverId])
+  @@map("calls")
+}
+
+enum CallType {
+  VOICE
+  VIDEO
+}
+
+enum CallStatus {
+  RINGING
+  ONGOING
+  ENDED
+  MISSED
+  REJECTED
+}
+
+// ─── Refresh Token ─────────────────────────────────
+model RefreshToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  isRevoked Boolean  @default(false) @map("is_revoked")
+
+  // Relations
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([token])
+  @@map("refresh_tokens")
+}
+
+// ─── Device ────────────────────────────────────────
+model Device {
+  id        String     @id @default(uuid())
+  platform  DeviceType
+  token     String?    // FCM / Push notification token
+  userAgent String?    @map("user_agent")
+  lastActive DateTime  @default(now()) @map("last_active")
+  createdAt DateTime   @default(now()) @map("created_at")
+
+  // Relations
+  userId String @map("user_id")
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("devices")
+}
+
+enum DeviceType {
+  WEB
+  ANDROID
+  IOS
+}

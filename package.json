@@ -1,0 +1,25 @@
+{
+  "name": "pulsechat",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Self-hosted real-time chat & voice calling platform",
+  "workspaces": [
+    "backend",
+    "web"
+  ],
+  "scripts": {
+    "dev:backend": "npm run dev --workspace=backend",
+    "dev:web": "npm run dev --workspace=web",
+    "build:backend": "npm run build --workspace=backend",
+    "build:web": "npm run build --workspace=web",
+    "db:migrate": "npm run db:migrate --workspace=backend",
+    "db:generate": "npm run db:generate --workspace=backend",
+    "db:studio": "npm run db:studio --workspace=backend",
+    "docker:up": "docker compose up -d",
+    "docker:down": "docker compose down",
+    "docker:logs": "docker compose logs -f"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

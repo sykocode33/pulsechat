@@ -1,0 +1,38 @@
+# Dependencies
+node_modules/
+
+# Build
+dist/
+build/
+.next/
+
+# Environment
+.env
+.env.local
+.env.production
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Prisma
+backend/prisma/migrations/**/migration_lock.toml
+
+# Docker volumes
+docker-data/
+
+# Logs
+*.log
+logs/
+
+# Coverage
+coverage/
+
+# MinIO data
+minio-data/
