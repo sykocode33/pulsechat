@@ -57,6 +57,13 @@ export function useWebRTC() {
 
   // Get local audio
   const getLocalStream = useCallback(async () => {
+    // getUserMedia requires HTTPS or localhost
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      throw new Error(
+        'Microphone access requires a secure connection (HTTPS). ' +
+        'Voice calls are not available over plain HTTP.'
+      );
+    }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
     localStreamRef.current = stream;
     return stream;
@@ -79,8 +86,9 @@ export function useWebRTC() {
         targetUserId,
         sdp: offer,
       });
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to start call:', err);
+      alert(err.message || 'Failed to start call. Please check microphone permissions.');
       reset();
     }
   }, [createPeer, getLocalStream, reset]);
@@ -107,60 +115,12 @@ export function useWebRTC() {
       });
 
       setActive();
-    } catch (err) {
+    } catch (err: any) {
       console.error('Failed to accept call:', err);
+      alert(err.message || 'Failed to accept call. Microphone may be blocked.');
       reset();
     }
   }, [createPeer, getLocalStream, setActive, reset]);
-
-  // ─── Reject Call ───────────────────────────────
-  const rejectCall = useCallback(() => {
-    const { callId: cid } = useCallStore.getState();
-    if (cid) {
-      getSocket().emit('call_reject', { callId: cid });
-    }
-    cleanup();
-    reset();
-  }, [reset]);
-
-  // ─── End Call ──────────────────────────────────
-  const endCall = useCallback(() => {
-    const { callId: cid } = useCallStore.getState();
-    if (cid) {
-      getSocket().emit('call_end', { callId: cid });
-    }
-    cleanup();
-    reset();
-  }, [reset]);
-
-  // ─── Mute / Speaker ────────────────────────────
-  useEffect(() => {
-    if (localStreamRef.current) {
-      localStreamRef.current.getAudioTracks().forEach((track) => {
-        track.enabled = !isMuted;
-      });
-    }
-  }, [isMuted]);
-
-  useEffect(() => {
-    if (remoteAudioRef.current) {
-      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.0;
-    }
-  }, [isSpeakerOn]);
-
-  // Handle answer from remote peer
-  const handleAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
-    if (peerRef.current) {
-      await peerRef.current.setRemoteDescription(new RTCSessionDescription(sdp));
-    }
-  }, []);
-
-  // Handle ICE candidate
-  const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
-    if (peerRef.current) {
-      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
-    }
-  }, []);
 
   const cleanup = useCallback(() => {
     localStreamRef.current?.getTracks().forEach((t) => t.stop());
@@ -168,6 +128,22 @@ export function useWebRTC() {
     peerRef.current?.close();
     peerRef.current = null;
   }, []);
+
+  // ─── Reject Call ───────────────────────────────
+  const rejectCall = useCallback(() => {
+    const { callId: cid } = useCallStore.getState();
+    if (cid) getSocket().emit('call_reject', { callId: cid });
+    cleanup();
+    reset();
+  }, [cleanup, reset]);
+
+  // ─── End Call ──────────────────────────────────
+  const endCall = useCallback(() => {
+    const { callId: cid } = useCallStore.getState();
+    if (cid) getSocket().emit('call_end', { callId: cid });
+    cleanup();
+    reset();
+  }, [cleanup, reset]);
 
   return {
     startCall,
