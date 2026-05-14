@@ -5,6 +5,7 @@ import { useAuthStore } from '@/store/authStore';
 import api from '@/services/api';
 import { getSocket } from '@/services/socket';
 import { formatTime, getInitials } from '@/lib/utils';
+import { useWebRTC } from '@/hooks/useWebRTC';
 import MessageInput from './MessageInput';
 import TypingIndicator from './TypingIndicator';
 import SecureMedia from './SecureMedia';
@@ -29,6 +30,8 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
   const otherUser = chat.type === 'PRIVATE'
     ? chat.members.find((m) => m.user.id !== currentUserId)?.user
     : null;
+
+  const { startCall } = useWebRTC();
 
   const chatName = chat.type === 'GROUP' ? chat.name : otherUser?.username || 'Unknown';
   const isOtherOnline = otherUser ? !!onlineUsers[otherUser.id] : false;
@@ -131,14 +134,20 @@ export default function MessageArea({ chat, currentUserId, onBack }: MessageArea
         </div>
 
         <button
+          onClick={() => {
+            if (otherUser) startCall(otherUser.id, otherUser.username);
+          }}
+          disabled={!otherUser || chat.type === 'GROUP'}
+          title={chat.type === 'GROUP' ? 'Voice calls not available in groups' : `Call ${otherUser?.username}`}
           style={{
             width: '38px', height: '38px', borderRadius: 'var(--radius-full)',
             background: 'var(--color-bg-tertiary)', border: '1px solid var(--color-border)',
-            color: 'var(--color-text-secondary)', cursor: 'pointer',
+            color: chat.type === 'GROUP' ? 'var(--color-text-muted)' : 'var(--color-text-secondary)',
+            cursor: chat.type === 'GROUP' ? 'not-allowed' : 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            transition: 'all 0.2s',
+            transition: 'all 0.2s', opacity: chat.type === 'GROUP' ? 0.4 : 1,
           }}
-          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.color = 'white'; }}
+          onMouseEnter={(e) => { if (chat.type !== 'GROUP') { e.currentTarget.style.background = 'var(--color-accent)'; e.currentTarget.style.color = 'white'; }}}
           onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--color-bg-tertiary)'; e.currentTarget.style.color = 'var(--color-text-secondary)'; }}
         >
           <Phone size={16} />

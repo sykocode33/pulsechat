@@ -5,6 +5,7 @@ import { logger } from '../utils/logger.js';
 import type { ClientToServerEvents, ServerToClientEvents, SocketData } from '../plugins/socket.js';
 import { setupChatHandlers } from './chat.handler.js';
 import { setupPresenceHandlers } from './presence.handler.js';
+import { setupCallHandlers } from './call.handler.js';
 
 type PulseChatIO = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
 type PulseChatSocket = Socket<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
@@ -58,6 +59,7 @@ export function setupSocketHandlers(io: PulseChatIO, redis: import('ioredis').de
     // Setup event handlers
     setupChatHandlers(io, socket, redis);
     setupPresenceHandlers(io, socket, redis);
+    setupCallHandlers(io, socket);
 
     // ─── Disconnect ──────────────────────────────────
     socket.on('disconnect', async (reason) => {
