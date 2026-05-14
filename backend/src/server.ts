@@ -10,6 +10,8 @@ import redisPlugin from './plugins/redis.js';
 import socketPlugin from './plugins/socket.js';
 import { prisma } from './plugins/prisma.js';
 import healthRoutes from './modules/health/health.routes.js';
+import authRoutes from './modules/auth/auth.routes.js';
+import usersRoutes from './modules/users/users.routes.js';
 
 // ─── Build Server ──────────────────────────────────
 async function buildServer() {
@@ -45,6 +47,8 @@ async function buildServer() {
 
   // ─── Routes ──────────────────────────────────────
   await app.register(healthRoutes, { prefix: '/api' });
+  await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(usersRoutes, { prefix: '/api/users' });
 
   // ─── Socket.IO Connection Handler ────────────────
   app.ready().then(() => {
