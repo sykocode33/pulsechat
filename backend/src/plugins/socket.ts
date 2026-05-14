@@ -1,7 +1,6 @@
 import fp from 'fastify-plugin';
-import fastifySocketIO from 'fastify-socket.io';
+import { Server } from 'socket.io';
 import type { FastifyInstance } from 'fastify';
-import type { Server, ServerOptions } from 'socket.io';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
@@ -20,9 +19,9 @@ export interface ServerToClientEvents {
   message_status: (data: { messageId: string; status: 'delivered' | 'read'; timestamp: string }) => void;
   user_online: (data: { userId: string }) => void;
   user_offline: (data: { userId: string; lastSeen: string }) => void;
-  call_offer: (data: { callId: string; callerId: string; callerName: string; sdp: RTCSessionDescriptionInit }) => void;
-  call_answer: (data: { callId: string; sdp: RTCSessionDescriptionInit }) => void;
-  ice_candidate: (data: { callId: string; candidate: RTCIceCandidateInit }) => void;
+  call_offer: (data: { callId: string; callerId: string; callerName: string; sdp: unknown }) => void;
+  call_answer: (data: { callId: string; sdp: unknown }) => void;
+  ice_candidate: (data: { callId: string; candidate: unknown }) => void;
   call_reject: (data: { callId: string }) => void;
   call_end: (data: { callId: string }) => void;
   error: (data: { message: string }) => void;
@@ -36,9 +35,9 @@ export interface ClientToServerEvents {
   message_delivered: (data: { messageId: string }) => void;
   join_chat: (data: { chatId: string }) => void;
   leave_chat: (data: { chatId: string }) => void;
-  call_offer: (data: { targetUserId: string; sdp: RTCSessionDescriptionInit }) => void;
-  call_answer: (data: { callId: string; sdp: RTCSessionDescriptionInit }) => void;
-  ice_candidate: (data: { callId: string; candidate: RTCIceCandidateInit }) => void;
+  call_offer: (data: { targetUserId: string; sdp: unknown }) => void;
+  call_answer: (data: { callId: string; sdp: unknown }) => void;
+  ice_candidate: (data: { callId: string; candidate: unknown }) => void;
   call_reject: (data: { callId: string }) => void;
   call_end: (data: { callId: string }) => void;
 }
@@ -48,14 +47,17 @@ export interface SocketData {
   username: string;
 }
 
+type PulseChatIO = Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+
 declare module 'fastify' {
   interface FastifyInstance {
-    io: Server<ClientToServerEvents, ServerToClientEvents, Record<string, never>, SocketData>;
+    io: PulseChatIO;
   }
 }
 
 async function socketPlugin(fastify: FastifyInstance) {
-  await fastify.register(fastifySocketIO, {
+  // Attach Socket.IO directly to Fastify's underlying HTTP server
+  const io: PulseChatIO = new Server(fastify.server, {
     cors: {
       origin: env.CLIENT_URL,
       methods: ['GET', 'POST'],
@@ -64,9 +66,18 @@ async function socketPlugin(fastify: FastifyInstance) {
     transports: ['websocket', 'polling'],
     pingInterval: 25000,
     pingTimeout: 20000,
-  } as Partial<ServerOptions>);
+  });
 
-  logger.info('✅ Socket.IO plugin registered');
+  // Decorate Fastify instance so `app.io` is available everywhere
+  fastify.decorate('io', io);
+
+  // Cleanup on server close
+  fastify.addHook('onClose', async () => {
+    io.close();
+    logger.info('Socket.IO server closed');
+  });
+
+  logger.info('✅ Socket.IO attached to server');
 }
 
 export default fp(socketPlugin, {
