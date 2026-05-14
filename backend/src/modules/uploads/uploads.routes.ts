@@ -1,6 +1,5 @@
 import type { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { authenticate } from '../../middleware/authenticate.js';
-import { env } from '../../config/env.js';
 import { logger } from '../../utils/logger.js';
 import { randomUUID } from 'crypto';
 import path from 'path';
@@ -12,11 +11,20 @@ if (!fs.existsSync(UPLOAD_DIR)) {
   fs.mkdirSync(UPLOAD_DIR, { recursive: true });
 }
 
-export default async function uploadsRoutes(app: FastifyInstance) {
-  app.addHook('preHandler', authenticate);
+// MIME type map for proper content-type headers
+const MIME_TYPES: Record<string, string> = {
+  '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+  '.gif': 'image/gif', '.webp': 'image/webp', '.svg': 'image/svg+xml',
+  '.mp4': 'video/mp4', '.webm': 'video/webm', '.mov': 'video/quicktime',
+  '.pdf': 'application/pdf', '.doc': 'application/msword',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.txt': 'text/plain', '.zip': 'application/zip', '.rar': 'application/x-rar-compressed',
+};
 
-  // ─── POST /uploads ───────────────────────────────
-  app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
+export default async function uploadsRoutes(app: FastifyInstance) {
+
+  // ─── POST /uploads (Protected — requires login) ──
+  app.post('/', { preHandler: [authenticate] }, async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const data = await request.file();
 
@@ -38,7 +46,7 @@ export default async function uploadsRoutes(app: FastifyInstance) {
       }
 
       const buffer = Buffer.concat(chunks);
-      const ext = path.extname(data.filename) || '';
+      const ext = path.extname(data.filename).toLowerCase() || '';
       const fileName = `${randomUUID()}${ext}`;
       const filePath = path.join(UPLOAD_DIR, fileName);
 
@@ -61,15 +69,26 @@ export default async function uploadsRoutes(app: FastifyInstance) {
     }
   });
 
-  // ─── GET /uploads/files/:filename — serve file ───
-  app.get('/files/:filename', { preHandler: [] }, async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
-    const filePath = path.join(UPLOAD_DIR, request.params.filename);
+  // ─── GET /uploads/files/:filename (Public — no auth) ─
+  app.get('/files/:filename', async (request: FastifyRequest<{ Params: { filename: string } }>, reply: FastifyReply) => {
+    const { filename } = request.params;
+
+    // Sanitize filename to prevent directory traversal
+    const sanitized = path.basename(filename);
+    const filePath = path.join(UPLOAD_DIR, sanitized);
 
     if (!fs.existsSync(filePath)) {
       return reply.status(404).send({ message: 'File not found' });
     }
 
+    // Set proper content type
+    const ext = path.extname(sanitized).toLowerCase();
+    const mimeType = MIME_TYPES[ext] || 'application/octet-stream';
+
     const stream = fs.createReadStream(filePath);
-    return reply.type('application/octet-stream').send(stream);
+    return reply
+      .header('Content-Type', mimeType)
+      .header('Cache-Control', 'public, max-age=31536000, immutable')
+      .send(stream);
   });
 }

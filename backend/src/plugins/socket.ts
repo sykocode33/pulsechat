@@ -12,6 +12,7 @@ export interface ServerToClientEvents {
     senderId: string;
     content: string;
     type: string;
+    mediaUrl?: string | null;
     createdAt: string;
     sender: { id: string; username: string; avatar: string | null };
   }) => void;

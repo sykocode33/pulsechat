@@ -30,6 +30,7 @@ export function useSocket() {
         senderId: data.senderId,
         content: data.content,
         type: data.type,
+        mediaUrl: data.mediaUrl,
         createdAt: data.createdAt,
         sender: data.sender,
       };

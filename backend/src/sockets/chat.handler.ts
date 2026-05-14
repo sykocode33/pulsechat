@@ -26,6 +26,7 @@ export function setupChatHandlers(io: PulseChatIO, socket: PulseChatSocket, redi
         senderId: userId,
         content: message.content,
         type: message.type,
+        mediaUrl: message.mediaUrl,
         createdAt: message.createdAt.toISOString(),
         sender: message.sender,
       });
