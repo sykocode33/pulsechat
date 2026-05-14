@@ -6,7 +6,7 @@ import { useCallStore } from '@/store/callStore';
 const ICE_SERVERS: RTCIceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  // Add your Coturn TURN server here when deployed:
+  // Add your Coturn TURN server here for production:
   // { urls: 'turn:YOUR_DOMAIN:3478', username: 'pulsechat', credential: 'YOUR_SECRET' },
 ];
 
@@ -16,13 +16,19 @@ export function useWebRTC() {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { isMuted, isSpeakerOn, callId, pendingSdp, setActive, setEnded, reset } = useCallStore();
+  const { isMuted, isSpeakerOn, callId, setActive, setEnded, reset } = useCallStore();
 
-  // Create peer connection
+  // ─── Cleanup ───────────────────────────────────
+  const cleanup = useCallback(() => {
+    localStreamRef.current?.getTracks().forEach((t) => t.stop());
+    localStreamRef.current = null;
+    peerRef.current?.close();
+    peerRef.current = null;
+  }, []);
+
+  // ─── Create Peer Connection ─────────────────────
   const createPeer = useCallback(() => {
-    if (peerRef.current) {
-      peerRef.current.close();
-    }
+    if (peerRef.current) peerRef.current.close();
 
     const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
 
@@ -43,22 +49,18 @@ export function useWebRTC() {
     };
 
     peer.onconnectionstatechange = () => {
-      if (peer.connectionState === 'connected') {
-        setActive();
-      }
-      if (['disconnected', 'failed', 'closed'].includes(peer.connectionState)) {
-        setEnded();
-      }
+      if (peer.connectionState === 'connected') setActive();
+      if (['disconnected', 'failed', 'closed'].includes(peer.connectionState)) setEnded();
     };
 
     peerRef.current = peer;
     return peer;
   }, [callId, setActive, setEnded]);
 
-  // Get local audio
+  // ─── Get Local Audio Stream ─────────────────────
   const getLocalStream = useCallback(async () => {
     // getUserMedia requires HTTPS or localhost
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(
         'Microphone access requires a secure connection (HTTPS). ' +
         'Voice calls are not available over plain HTTP.'
@@ -82,10 +84,7 @@ export function useWebRTC() {
 
       useCallStore.getState().setOutgoingCall('pending', targetUserId, targetUsername);
 
-      getSocket().emit('call_offer', {
-        targetUserId,
-        sdp: offer,
-      });
+      getSocket().emit('call_offer', { targetUserId, sdp: offer });
     } catch (err: any) {
       console.error('Failed to start call:', err);
       alert(err.message || 'Failed to start call. Please check microphone permissions.');
@@ -104,15 +103,14 @@ export function useWebRTC() {
 
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
-      await peer.setRemoteDescription(new RTCSessionDescription(store.pendingSdp as RTCSessionDescriptionInit));
+      await peer.setRemoteDescription(
+        new RTCSessionDescription(store.pendingSdp as RTCSessionDescriptionInit)
+      );
 
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
 
-      getSocket().emit('call_answer', {
-        callId: store.callId,
-        sdp: answer,
-      });
+      getSocket().emit('call_answer', { callId: store.callId, sdp: answer });
 
       setActive();
     } catch (err: any) {
@@ -122,11 +120,18 @@ export function useWebRTC() {
     }
   }, [createPeer, getLocalStream, setActive, reset]);
 
-  const cleanup = useCallback(() => {
-    localStreamRef.current?.getTracks().forEach((t) => t.stop());
-    localStreamRef.current = null;
-    peerRef.current?.close();
-    peerRef.current = null;
+  // ─── Handle Answer (from remote) ───────────────
+  const handleAnswer = useCallback(async (sdp: RTCSessionDescriptionInit) => {
+    if (peerRef.current) {
+      await peerRef.current.setRemoteDescription(new RTCSessionDescription(sdp));
+    }
+  }, []);
+
+  // ─── Handle ICE Candidate (from remote) ────────
+  const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
+    if (peerRef.current) {
+      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+    }
   }, []);
 
   // ─── Reject Call ───────────────────────────────
@@ -144,6 +149,22 @@ export function useWebRTC() {
     cleanup();
     reset();
   }, [cleanup, reset]);
+
+  // ─── Mute control ──────────────────────────────
+  useEffect(() => {
+    if (localStreamRef.current) {
+      localStreamRef.current.getAudioTracks().forEach((track) => {
+        track.enabled = !isMuted;
+      });
+    }
+  }, [isMuted]);
+
+  // ─── Speaker control ───────────────────────────
+  useEffect(() => {
+    if (remoteAudioRef.current) {
+      remoteAudioRef.current.volume = isSpeakerOn ? 1.0 : 0.0;
+    }
+  }, [isSpeakerOn]);
 
   return {
     startCall,
