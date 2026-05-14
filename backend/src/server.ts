@@ -12,6 +12,8 @@ import { prisma } from './plugins/prisma.js';
 import healthRoutes from './modules/health/health.routes.js';
 import authRoutes from './modules/auth/auth.routes.js';
 import usersRoutes from './modules/users/users.routes.js';
+import chatsRoutes from './modules/chats/chats.routes.js';
+import { setupSocketHandlers } from './sockets/index.js';
 
 // ─── Build Server ──────────────────────────────────
 async function buildServer() {
@@ -49,16 +51,12 @@ async function buildServer() {
   await app.register(healthRoutes, { prefix: '/api' });
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(usersRoutes, { prefix: '/api/users' });
+  await app.register(chatsRoutes, { prefix: '/api/chats' });
 
-  // ─── Socket.IO Connection Handler ────────────────
+  // ─── Socket.IO Handlers ──────────────────────────
   app.ready().then(() => {
-    app.io.on('connection', (socket) => {
-      logger.info(`Socket connected: ${socket.id}`);
-
-      socket.on('disconnect', (reason) => {
-        logger.info(`Socket disconnected: ${socket.id} — ${reason}`);
-      });
-    });
+    setupSocketHandlers(app.io, app.redis);
+    logger.info('📡 Socket.IO handlers initialized');
   });
 
   return app;
