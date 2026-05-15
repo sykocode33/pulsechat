@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect } from 'react';
 import { getSocket } from '@/services/socket';
 import { useCallStore } from '@/store/callStore';
 import { useAuthStore } from '@/store/authStore';
@@ -10,45 +10,32 @@ export default function CallManager() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const status = useCallStore((s) => s.status);
   const setIncomingCall = useCallStore((s) => s.setIncomingCall);
+
+  // ✅ All components share ONE WebRTC instance via context
   const { acceptCall, rejectCall, endCall, handleAnswer, handleIceCandidate, remoteAudioRef } = useWebRTC();
-
-  // Hidden audio element for remote stream
-  const audioEl = useRef<HTMLAudioElement>(null);
-
-  useEffect(() => {
-    if (audioEl.current) {
-      remoteAudioRef.current = audioEl.current;
-    }
-  }, [remoteAudioRef]);
 
   useEffect(() => {
     if (!isAuthenticated) return;
-
     const socket = getSocket();
 
-    // ─── Incoming call ──────────────────────────
     socket.on('call_offer', (data) => {
       setIncomingCall(data.callId, data.callerId, data.callerName, data.sdp);
     });
 
-    // ─── Call answered ──────────────────────────
     socket.on('call_answer', (data) => {
       handleAnswer(data.sdp as RTCSessionDescriptionInit);
       useCallStore.getState().setActive();
     });
 
-    // ─── ICE candidates ─────────────────────────
     socket.on('ice_candidate', (data) => {
       handleIceCandidate(data.candidate as RTCIceCandidateInit);
     });
 
-    // ─── Call rejected ──────────────────────────
     socket.on('call_reject', () => {
       useCallStore.getState().setEnded();
       setTimeout(() => useCallStore.getState().reset(), 2000);
     });
 
-    // ─── Call ended by remote ───────────────────
     socket.on('call_end', () => {
       useCallStore.getState().setEnded();
       setTimeout(() => useCallStore.getState().reset(), 2000);
@@ -63,26 +50,24 @@ export default function CallManager() {
     };
   }, [isAuthenticated, setIncomingCall, handleAnswer, handleIceCandidate]);
 
-  const handleEndCall = () => {
-    endCall();
-  };
-
   return (
     <>
-      {/* Hidden remote audio element */}
-      <audio ref={audioEl} autoPlay style={{ display: 'none' }} />
+      {/* ✅ Single shared audio element — remoteAudioRef wired here */}
+      <audio
+        ref={remoteAudioRef}
+        autoPlay
+        playsInline
+        style={{ display: 'none' }}
+      />
 
-      {/* Incoming call overlay */}
       {status === 'incoming' && (
         <IncomingCall onAccept={acceptCall} onReject={rejectCall} />
       )}
 
-      {/* Active / Outgoing call overlay */}
       {(status === 'calling' || status === 'active') && (
-        <ActiveCall onEnd={handleEndCall} />
+        <ActiveCall onEnd={endCall} />
       )}
 
-      {/* Call ended banner */}
       {status === 'ended' && (
         <div
           className="animate-fade-in"
