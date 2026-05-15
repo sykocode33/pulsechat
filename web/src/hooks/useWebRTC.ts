@@ -56,7 +56,10 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
 
   const createPeer = useCallback(() => {
     if (peerRef.current) peerRef.current.close();
-    const peer = new RTCPeerConnection({ iceServers: getIceServers() });
+    const peer = new RTCPeerConnection({
+      iceServers: getIceServers(),
+      iceTransportPolicy: 'relay', // force TURN relay only — remove after debugging
+    });
 
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
