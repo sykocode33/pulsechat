@@ -5,11 +5,14 @@ import { useCallStore } from '@/store/callStore';
 const getIceServers = (): RTCIceServer[] => [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  // TCP TURN first (confirmed working), UDP as fallback
   {
-    urls: [
-      'turn:chat.ankitktool.site:3478?transport=udp',
-      'turn:chat.ankitktool.site:3478?transport=tcp',
-    ],
+    urls: 'turn:chat.ankitktool.site:3478?transport=tcp',
+    username: 'pulsechat',
+    credential: 'pulsechat_turn_secret',
+  },
+  {
+    urls: 'turn:chat.ankitktool.site:3478?transport=udp',
     username: 'pulsechat',
     credential: 'pulsechat_turn_secret',
   },
@@ -63,6 +66,10 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
 
     peer.onicecandidate = (event) => {
       if (!event.candidate) return;
+
+      // Log candidate to see if relay uses public or private IP
+      console.log('🧊 Generated candidate:', event.candidate.candidate);
+
       const callId = useCallStore.getState().callId;
 
       if (callId && callId !== 'pending' && callIdConfirmed.current) {
