@@ -20,6 +20,7 @@ export interface ServerToClientEvents {
   message_status: (data: { messageId: string; status: 'delivered' | 'read'; timestamp: string }) => void;
   user_online: (data: { userId: string }) => void;
   user_offline: (data: { userId: string; lastSeen: string }) => void;
+  turn_credentials: (data: { iceServers: RTCIceServer[] }) => void;
   call_offer: (data: { callId: string; callerId: string; callerName: string; sdp: unknown }) => void;
   call_initiated: (data: { callId: string }) => void;  // sent back to caller with real callId
   call_answer: (data: { callId: string; sdp: unknown }) => void;
@@ -37,6 +38,7 @@ export interface ClientToServerEvents {
   message_delivered: (data: { messageId: string }) => void;
   join_chat: (data: { chatId: string }) => void;
   leave_chat: (data: { chatId: string }) => void;
+  get_turn_credentials: () => void;
   call_offer: (data: { targetUserId: string; sdp: unknown }) => void;
   call_answer: (data: { callId: string; sdp: unknown }) => void;
   ice_candidate: (data: { callId: string; candidate: unknown }) => void;

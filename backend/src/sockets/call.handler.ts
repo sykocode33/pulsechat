@@ -13,6 +13,40 @@ const activeCalls = new Map<string, { callerId: string; receiverId: string; star
 export function setupCallHandlers(io: PulseChatIO, socket: PulseChatSocket) {
   const { userId, username } = socket.data;
 
+  // ─── TURN Credentials (sent securely over authenticated socket) ──
+  socket.on('get_turn_credentials', () => {
+    const iceServers: RTCIceServer[] = [
+      { urls: 'stun:stun.l.google.com:19302' },
+      // Own TURN server
+      {
+        urls: [
+          'turn:chat.ankitktool.site:3478?transport=tcp',
+          'turn:chat.ankitktool.site:3478?transport=udp',
+        ],
+        username: 'pulsechat',
+        credential: 'pulsechat_turn_secret',
+      },
+    ];
+
+    // Add Metered TURN if configured (fallback for same-LAN/same-IP scenarios)
+    const meteredUser = process.env.METERED_USERNAME;
+    const meteredCred = process.env.METERED_CREDENTIAL;
+    if (meteredUser && meteredCred) {
+      iceServers.push({
+        urls: [
+          'turn:a.relay.metered.ca:80',
+          'turn:a.relay.metered.ca:80?transport=tcp',
+          'turn:a.relay.metered.ca:443',
+          'turn:a.relay.metered.ca:443?transport=tcp',
+        ],
+        username: meteredUser,
+        credential: meteredCred,
+      });
+    }
+
+    socket.emit('turn_credentials', { iceServers });
+  });
+
   // ─── Initiate Call ───────────────────────────────
   socket.on('call_offer', async (data) => {
     const { targetUserId, sdp } = data as { targetUserId: string; sdp: unknown };

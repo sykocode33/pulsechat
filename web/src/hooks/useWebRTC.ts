@@ -2,21 +2,24 @@ import { createContext, useContext, useRef, useCallback, useEffect, createElemen
 import { getSocket } from '@/services/socket';
 import { useCallStore } from '@/store/callStore';
 
-const getIceServers = (): RTCIceServer[] => [
-  { urls: 'stun:stun.l.google.com:19302' },
-  { urls: 'stun:stun1.l.google.com:19302' },
-  // TCP TURN first (confirmed working), UDP as fallback
-  {
-    urls: 'turn:chat.ankitktool.site:3478?transport=tcp',
-    username: 'pulsechat',
-    credential: 'pulsechat_turn_secret',
-  },
-  {
-    urls: 'turn:chat.ankitktool.site:3478?transport=udp',
-    username: 'pulsechat',
-    credential: 'pulsechat_turn_secret',
-  },
-];
+// Fetch TURN credentials from backend (never exposed in frontend bundle)
+const getTurnCredentials = (): Promise<RTCIceServer[]> => {
+  return new Promise((resolve) => {
+    const socket = getSocket();
+    const timeout = setTimeout(() => {
+      // Fallback to STUN-only if backend doesn't respond
+      resolve([{ urls: 'stun:stun.l.google.com:19302' }]);
+    }, 3000);
+
+    socket.once('turn_credentials', (data) => {
+      clearTimeout(timeout);
+      resolve(data.iceServers);
+    });
+
+    socket.emit('get_turn_credentials');
+  });
+};
+
 
 interface WebRTCContextValue {
   startCall: (targetUserId: string, targetUsername: string) => Promise<void>;
@@ -57,10 +60,10 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
     callIdConfirmed.current = false;
   }, []);
 
-  const createPeer = useCallback(() => {
+  const createPeer = useCallback((iceServers: RTCIceServer[]) => {
     if (peerRef.current) peerRef.current.close();
     const peer = new RTCPeerConnection({
-      iceServers: getIceServers(),
+      iceServers,
       // Allow all candidate types — host/srflx works on same network, TURN used as fallback
     });
 
@@ -135,8 +138,8 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
       pendingEmitBuffer.current = [];
       remoteDescSet.current = false;
 
-      const stream = await getLocalStream();
-      const peer = createPeer();
+      const [stream, iceServers] = await Promise.all([getLocalStream(), getTurnCredentials()]);
+      const peer = createPeer(iceServers);
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       const offer = await peer.createOffer({ offerToReceiveAudio: true });
       await peer.setLocalDescription(offer);
@@ -159,8 +162,8 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
       remoteDescSet.current = false;
       iceCandidateBuffer.current = [];
 
-      const stream = await getLocalStream();
-      const peer = createPeer();
+      const [stream, iceServers] = await Promise.all([getLocalStream(), getTurnCredentials()]);
+      const peer = createPeer(iceServers);
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
       await peer.setRemoteDescription(new RTCSessionDescription(store.pendingSdp as RTCSessionDescriptionInit));
       remoteDescSet.current = true;
