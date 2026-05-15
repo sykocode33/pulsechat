@@ -2,12 +2,19 @@ import { useRef, useCallback, useEffect } from 'react';
 import { getSocket } from '@/services/socket';
 import { useCallStore } from '@/store/callStore';
 
-// ICE servers — public STUN + optional TURN
-const ICE_SERVERS: RTCIceServer[] = [
+// ICE servers — STUN + TURN (required for production behind NAT)
+const getIceServers = (): RTCIceServer[] => [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
-  // Add your Coturn TURN server here for production:
-  // { urls: 'turn:YOUR_DOMAIN:3478', username: 'pulsechat', credential: 'YOUR_SECRET' },
+  // Coturn TURN server (set up on your AWS server)
+  {
+    urls: [
+      'turn:chat.ankitktool.site:3478?transport=udp',
+      'turn:chat.ankitktool.site:3478?transport=tcp',
+    ],
+    username: 'pulsechat',
+    credential: 'pulsechat_turn_secret',
+  },
 ];
 
 export function useWebRTC() {
@@ -16,7 +23,7 @@ export function useWebRTC() {
   const remoteStreamRef = useRef<MediaStream | null>(null);
   const remoteAudioRef = useRef<HTMLAudioElement | null>(null);
 
-  const { isMuted, isSpeakerOn, callId, setActive, setEnded, reset } = useCallStore();
+  const { isMuted, isSpeakerOn, setActive, setEnded, reset } = useCallStore();
 
   // ─── Cleanup ───────────────────────────────────
   const cleanup = useCallback(() => {
@@ -30,40 +37,61 @@ export function useWebRTC() {
   const createPeer = useCallback(() => {
     if (peerRef.current) peerRef.current.close();
 
-    const peer = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const peer = new RTCPeerConnection({ iceServers: getIceServers() });
 
     peer.onicecandidate = (event) => {
-      if (event.candidate && callId) {
+      if (!event.candidate) return;
+
+      // ⚠️ Always read callId fresh from store — it may not be set when peer is created
+      const currentCallId = useCallStore.getState().callId;
+      if (currentCallId && currentCallId !== 'pending') {
         getSocket().emit('ice_candidate', {
-          callId,
+          callId: currentCallId,
           candidate: event.candidate.toJSON(),
         });
+      } else {
+        // Buffer candidate until callId is known
+        setTimeout(() => {
+          const retryCallId = useCallStore.getState().callId;
+          if (retryCallId && retryCallId !== 'pending') {
+            getSocket().emit('ice_candidate', {
+              callId: retryCallId,
+              candidate: event.candidate!.toJSON(),
+            });
+          }
+        }, 1000);
       }
     };
 
     peer.ontrack = (event) => {
+      console.log('🔊 Remote track received:', event.streams);
       remoteStreamRef.current = event.streams[0];
       if (remoteAudioRef.current) {
         remoteAudioRef.current.srcObject = event.streams[0];
+        // Force play (browsers may block autoplay)
+        remoteAudioRef.current.play().catch((e) => console.warn('Audio play blocked:', e));
       }
     };
 
     peer.onconnectionstatechange = () => {
+      console.log('🔗 Peer connection state:', peer.connectionState);
       if (peer.connectionState === 'connected') setActive();
       if (['disconnected', 'failed', 'closed'].includes(peer.connectionState)) setEnded();
     };
 
+    peer.oniceconnectionstatechange = () => {
+      console.log('🧊 ICE state:', peer.iceConnectionState);
+    };
+
     peerRef.current = peer;
     return peer;
-  }, [callId, setActive, setEnded]);
+  }, [setActive, setEnded]);
 
   // ─── Get Local Audio Stream ─────────────────────
   const getLocalStream = useCallback(async () => {
-    // getUserMedia requires HTTPS or localhost
     if (!navigator.mediaDevices?.getUserMedia) {
       throw new Error(
-        'Microphone access requires a secure connection (HTTPS). ' +
-        'Voice calls are not available over plain HTTP.'
+        'Microphone access requires HTTPS. Voice calls are not available over HTTP.'
       );
     }
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: false });
@@ -77,17 +105,19 @@ export function useWebRTC() {
       const stream = await getLocalStream();
       const peer = createPeer();
 
+      // Add tracks BEFORE creating offer
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
       const offer = await peer.createOffer({ offerToReceiveAudio: true });
       await peer.setLocalDescription(offer);
 
+      // Set callId in store BEFORE emitting so ICE callbacks have it
       useCallStore.getState().setOutgoingCall('pending', targetUserId, targetUsername);
 
       getSocket().emit('call_offer', { targetUserId, sdp: offer });
     } catch (err: any) {
       console.error('Failed to start call:', err);
-      alert(err.message || 'Failed to start call. Please check microphone permissions.');
+      alert(err.message || 'Failed to start call. Check microphone permissions.');
       reset();
     }
   }, [createPeer, getLocalStream, reset]);
@@ -101,6 +131,7 @@ export function useWebRTC() {
       const stream = await getLocalStream();
       const peer = createPeer();
 
+      // Add tracks BEFORE setting remote description
       stream.getTracks().forEach((track) => peer.addTrack(track, stream));
 
       await peer.setRemoteDescription(
@@ -111,7 +142,6 @@ export function useWebRTC() {
       await peer.setLocalDescription(answer);
 
       getSocket().emit('call_answer', { callId: store.callId, sdp: answer });
-
       setActive();
     } catch (err: any) {
       console.error('Failed to accept call:', err);
@@ -130,7 +160,11 @@ export function useWebRTC() {
   // ─── Handle ICE Candidate (from remote) ────────
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     if (peerRef.current) {
-      await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      try {
+        await peerRef.current.addIceCandidate(new RTCIceCandidate(candidate));
+      } catch (e) {
+        console.warn('ICE candidate error:', e);
+      }
     }
   }, []);
 
