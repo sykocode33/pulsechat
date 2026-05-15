@@ -78,8 +78,8 @@ export function setupCallHandlers(io: PulseChatIO, socket: PulseChatSocket) {
     // Notify caller
     io.to(`user:${call.callerId}`).emit('call_reject', { callId });
 
-    // Save call record as missed
-    await saveCallRecord(call.callerId, call.receiverId, 0, 'MISSED').catch(() => {});
+    // Save call record as REJECTED
+    await saveCallRecord(call.callerId, call.receiverId, 0, 'REJECTED').catch(() => {});
     activeCalls.delete(callId);
   });
 
@@ -100,8 +100,8 @@ export function setupCallHandlers(io: PulseChatIO, socket: PulseChatSocket) {
     const targetUserId = call.callerId === userId ? call.receiverId : call.callerId;
     io.to(`user:${targetUserId}`).emit('call_end', { callId });
 
-    // Save call record
-    await saveCallRecord(call.callerId, call.receiverId, duration, 'COMPLETED').catch(() => {});
+    // Save call record as ENDED
+    await saveCallRecord(call.callerId, call.receiverId, duration, 'ENDED').catch(() => {});
     activeCalls.delete(callId);
   });
 
@@ -115,21 +115,26 @@ export function setupCallHandlers(io: PulseChatIO, socket: PulseChatSocket) {
 
         io.to(`user:${targetUserId}`).emit('call_end', { callId });
 
-        await saveCallRecord(call.callerId, call.receiverId, duration, 'COMPLETED').catch(() => {});
+        await saveCallRecord(call.callerId, call.receiverId, duration, 'ENDED').catch(() => {});
         activeCalls.delete(callId);
       }
     }
   });
 }
 
-async function saveCallRecord(callerId: string, receiverId: string, duration: number, status: string) {
+async function saveCallRecord(
+  callerId: string,
+  receiverId: string,
+  duration: number,
+  status: 'RINGING' | 'ONGOING' | 'ENDED' | 'MISSED' | 'REJECTED'
+) {
   try {
     await prisma.call.create({
       data: {
         callerId,
         receiverId,
         duration,
-        status: status as 'COMPLETED' | 'MISSED' | 'REJECTED',
+        status,
         endedAt: new Date(),
       },
     });
