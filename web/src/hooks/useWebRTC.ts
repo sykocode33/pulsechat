@@ -199,6 +199,8 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
   const handleIceCandidate = useCallback(async (candidate: RTCIceCandidateInit) => {
     if (!peerRef.current) return;
 
+    console.log('📥 Received remote ICE candidate:', (candidate as any).candidate || JSON.stringify(candidate));
+
     if (!remoteDescSet.current) {
       // Buffer until remote description is set
       iceCandidateBuffer.current.push(candidate);
