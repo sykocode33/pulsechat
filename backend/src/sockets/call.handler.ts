@@ -29,6 +29,9 @@ export function setupCallHandlers(io: PulseChatIO, socket: PulseChatSocket) {
 
     logger.info(`📞 Call initiated: ${username} → ${targetUserId} [${callId}]`);
 
+    // ✅ Tell the CALLER their callId so they can use it for ICE candidates
+    socket.emit('call_initiated', { callId });
+
     // Send offer to target user's room
     io.to(`user:${targetUserId}`).emit('call_offer', {
       callId,

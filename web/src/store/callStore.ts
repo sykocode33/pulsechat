@@ -19,6 +19,7 @@ export interface CallState {
 
   // Actions
   setOutgoingCall: (callId: string, remoteUserId: string, remoteUsername: string) => void;
+  setCallId: (callId: string) => void;  // set real callId after server confirms
   setIncomingCall: (callId: string, callerId: string, callerName: string, sdp: unknown) => void;
   setActive: () => void;
   setEnded: () => void;
@@ -40,6 +41,8 @@ export const useCallStore = create<CallState>((set) => ({
 
   setOutgoingCall: (callId, remoteUserId, remoteUsername) =>
     set({ status: 'calling', callId, remoteUserId, remoteUsername, pendingSdp: null }),
+
+  setCallId: (callId) => set({ callId }),
 
   setIncomingCall: (callId, callerId, callerName, sdp) =>
     set({ status: 'incoming', callId, remoteUserId: callerId, remoteUsername: callerName, pendingSdp: sdp }),

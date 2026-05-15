@@ -12,11 +12,17 @@ export default function CallManager() {
   const setIncomingCall = useCallStore((s) => s.setIncomingCall);
 
   // ✅ All components share ONE WebRTC instance via context
-  const { acceptCall, rejectCall, endCall, handleAnswer, handleIceCandidate, remoteAudioRef } = useWebRTC();
+  const { acceptCall, rejectCall, endCall, handleAnswer, handleIceCandidate, onCallInitiated, remoteAudioRef } = useWebRTC();
 
   useEffect(() => {
     if (!isAuthenticated) return;
     const socket = getSocket();
+
+    // ✅ Server sends back the real callId to caller — flush buffered ICE candidates
+    socket.on('call_initiated', (data) => {
+      console.log('📞 call_initiated received, real callId:', data.callId);
+      onCallInitiated(data.callId);
+    });
 
     socket.on('call_offer', (data) => {
       setIncomingCall(data.callId, data.callerId, data.callerName, data.sdp);
@@ -42,6 +48,7 @@ export default function CallManager() {
     });
 
     return () => {
+      socket.off('call_initiated');
       socket.off('call_offer');
       socket.off('call_answer');
       socket.off('ice_candidate');

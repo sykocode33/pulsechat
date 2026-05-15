@@ -21,6 +21,7 @@ export interface ServerToClientEvents {
   user_online: (data: { userId: string }) => void;
   user_offline: (data: { userId: string; lastSeen: string }) => void;
   call_offer: (data: { callId: string; callerId: string; callerName: string; sdp: unknown }) => void;
+  call_initiated: (data: { callId: string }) => void;  // sent back to caller with real callId
   call_answer: (data: { callId: string; sdp: unknown }) => void;
   ice_candidate: (data: { callId: string; candidate: unknown }) => void;
   call_reject: (data: { callId: string }) => void;
