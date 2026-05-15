@@ -61,7 +61,7 @@ export function WebRTCProvider({ children }: { children: ReactNode }) {
     if (peerRef.current) peerRef.current.close();
     const peer = new RTCPeerConnection({
       iceServers: getIceServers(),
-      iceTransportPolicy: 'relay', // force TURN relay only — remove after debugging
+      // Allow all candidate types — host/srflx works on same network, TURN used as fallback
     });
 
     peer.onicecandidate = (event) => {
